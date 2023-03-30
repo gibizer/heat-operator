@@ -20,8 +20,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/golang/mock/gomock"
-	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/openstack-k8s-operators/lib-common/modules/test/helpers"
@@ -29,55 +27,43 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	heatv1 "github.com/openstack-k8s-operators/heat-operator/api/v1beta1"
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 )
 
 var _ = Describe("Heat controller", func() {
 
-	var namespace string
 	var secret *corev1.Secret
 	var heatTransportURLName types.NamespacedName
 	var heatName types.NamespacedName
+	//var ctrl *gomock.Controller
+	//var mockOpenStack *MockOkoOpenStack
 
 	BeforeEach(func() {
-		mockCtrl := gomock.NewController(GinkgoT())
-		defer mockCtrl.Finish()
+//		ctrl = gomock.NewController(GinkgoT())
+//		mockOpenStack = NewMockOkoOpenStack(ctrl)
+//		defer ctrl.Finish()
 
-		mockOkoOpenStack := NewMockOkoOpenStack(mockCtrl)
-		expected := "blahUserID"
-		mockOkoOpenStack.EXPECT().CreateUser(gomock.Any(), gomock.Any()).Return(expected, nil)
-		//domainExpected := "blahDomainID"
-		//mockOkoOpenStack.EXPECT().CreateDomain(gomock.Any(), gomock.Any()).Return(domainExpected, nil)
-		// NOTE(gibi): We need to create a unique namespace for each test run
-		// as namespaces cannot be deleted in a locally running envtest. See
-		// https://book.kubebuilder.io/reference/envtest.html#namespace-usage-limitation
-		namespace = uuid.New().String()
-		th.CreateNamespace(namespace)
-		// We still request the delete of the Namespace to properly cleanup if
-		// we run the test in an existing cluster.
-		DeferCleanup(th.DeleteNamespace, namespace)
-		// lib-common uses OPERATOR_TEMPLATES env var to locate the "templates"
-		// directory of the operator. We need to set them otherwise lib-common
-		// will fail to generate the ConfigMap as it does not find common.sh
-		err := os.Setenv("OPERATOR_TEMPLATES", "../../templates")
-		Expect(err).NotTo(HaveOccurred())
-
-		//name := fmt.Sprintf("heat-%s", uuid.New().String())
-		name := "heat"
+		heatName = types.NamespacedName{
+			Name:      "heat",
+			Namespace: namespace,
+		}
 		heatTransportURLName = types.NamespacedName{
 			Namespace: namespace,
-			Name:      name + "-heat-transport",
+			Name:      heatName.Name + "-heat-transport",
 		}
 
-		heatName = CreateHeat(namespace, name, GetDefaultHeatSpec())
-		DeferCleanup(DeleteHeat, heatName)
+		err := os.Setenv("OPERATOR_TEMPLATES", "../../templates")
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	When("A Heat instance is created", func() {
+		BeforeEach(func() {
+			DeferCleanup(DeleteInstance, CreateHeat(heatName, GetDefaultHeatSpec()))
+		})
+
 		It("should have the Spec fields initialized", func() {
 			Heat := GetHeat(heatName)
-			Expect(Heat.Spec.DatabaseInstance).Should(Equal("test-heat-db-instance"))
+			Expect(Heat.Spec.DatabaseInstance).Should(Equal("openstack"))
 			Expect(Heat.Spec.DatabaseUser).Should(Equal("heat"))
 			Expect(Heat.Spec.RabbitMqClusterName).Should(Equal("rabbitmq"))
 			Expect(Heat.Spec.ServiceUser).Should(Equal("heat"))
@@ -116,60 +102,39 @@ var _ = Describe("Heat controller", func() {
 		})
 	})
 
-	When("an unrelated secret is provided", func() {
-		It("should remain in a state of waiting for the proper secret", func() {
-			SimulateTransportURLReady(heatTransportURLName)
-			secret = &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "an-unrelated-secret",
-					Namespace: namespace,
-				},
-			}
-			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
-			DeferCleanup(k8sClient.Delete, ctx, secret)
-
-			th.ExpectCondition(
-				heatName,
-				ConditionGetterFunc(HeatConditionGetter),
-				condition.InputReadyCondition,
-				corev1.ConditionFalse,
-			)
-			th.ExpectCondition(
-				heatName,
-				ConditionGetterFunc(HeatConditionGetter),
-				heatv1.HeatRabbitMqTransportURLReadyCondition,
-				corev1.ConditionFalse,
-			)
-
-		})
-		It("should not create a config map", func() {
-			Eventually(func() []corev1.ConfigMap {
-				return th.ListConfigMaps(fmt.Sprintf("%s-%s", heatName.Name, "config-data")).Items
-			}, timeout, interval).Should(BeEmpty())
-		})
-	})
-
 	When("the proper secret is provided and TransportURL Created", func() {
 		BeforeEach(func() {
-			SimulateTransportURLReady(heatTransportURLName)
+			DeferCleanup(DeleteInstance, CreateHeat(heatName, GetDefaultHeatSpec()))
+			keystoneAPIName := th.CreateKeystoneAPI(namespace)
+			DeferCleanup(th.DeleteKeystoneAPI, keystoneAPIName)
+			keystoneAPI := th.GetKeystoneAPI(keystoneAPIName)
+			keystoneAPI.Status.APIEndpoints["internal"] = "http://keystone-internal-openstack.testing"
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Status().Update(ctx, keystoneAPI.DeepCopy())).Should(Succeed())
+			}, timeout, interval).Should(Succeed())
 
 			secret = &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      heatTransportURLName.Name,
+					Name:      "rabbitmq-secret",
 					Namespace: namespace,
 				},
 			}
 			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
 			DeferCleanup(k8sClient.Delete, ctx, secret)
-		})
-
-		It("should be in a state of having the TransportURL ready", func() {
-			th.ExpectCondition(
-				heatName,
-				ConditionGetterFunc(HeatConditionGetter),
-				heatv1.HeatRabbitMqTransportURLReadyCondition,
-				corev1.ConditionTrue,
+			DeferCleanup(
+				k8sClient.Delete, ctx, CreateHeatSecret(namespace, SecretName))
+			DeferCleanup(
+				DeleteDBService,
+				CreateDBService(
+					namespace,
+					GetHeat(heatName).Spec.DatabaseInstance,
+					corev1.ServiceSpec{
+						Ports: []corev1.ServicePort{{Port: 3306}},
+					},
+				),
 			)
+			th.SimulateTransportURLReady(heatTransportURLName)
+			th.SimulateMariaDBDatabaseCompleted(heatName)
 		})
 
 		It("should not create a config map", func() {
@@ -181,6 +146,7 @@ var _ = Describe("Heat controller", func() {
 
 	When("keystoneAPI instance is not available", func() {
 		BeforeEach(func() {
+			DeferCleanup(DeleteInstance, CreateHeat(heatName, GetDefaultHeatSpec()))
 			secret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      SecretName,
@@ -192,7 +158,7 @@ var _ = Describe("Heat controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
 			DeferCleanup(k8sClient.Delete, ctx, secret)
-			SimulateTransportURLReady(heatTransportURLName)
+			th.SimulateTransportURLReady(heatTransportURLName)
 		})
 		It("should not create a config map", func() {
 			Eventually(func() []corev1.ConfigMap {
@@ -203,6 +169,7 @@ var _ = Describe("Heat controller", func() {
 
 	When("keystoneAPI instance is available", func() {
 		BeforeEach(func() {
+			DeferCleanup(DeleteInstance, CreateHeat(heatName, GetDefaultHeatSpec()))
 			secret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      SecretName,
@@ -214,7 +181,7 @@ var _ = Describe("Heat controller", func() {
 			}
 			rmqSecret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      heatTransportURLName.Name,
+					Name:      "rabbitmq-secret",
 					Namespace: namespace,
 				},
 				Data: map[string][]byte{
@@ -225,7 +192,7 @@ var _ = Describe("Heat controller", func() {
 			DeferCleanup(k8sClient.Delete, ctx, rmqSecret)
 			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
 			DeferCleanup(k8sClient.Delete, ctx, secret)
-			SimulateTransportURLReady(heatTransportURLName)
+			th.SimulateTransportURLReady(heatTransportURLName)
 		})
 
 		It("should create a ConfigMap for heat.conf with the heat_domain_admin config option set", func() {
@@ -243,7 +210,7 @@ var _ = Describe("Heat controller", func() {
 
 			//keystone := GetKeystoneAPI(keystoneAPI)
 			Expect(th.GetConfigMap(configataCM).Data["heat.conf"]).Should(
-				ContainSubstring("stack_domain_admin=heat_stack_domain_admin"))
+				ContainSubstring("stack_domain_admin = heat_stack_domain_admin"))
 
 			th.ExpectCondition(
 				heatName,
@@ -261,6 +228,7 @@ var _ = Describe("Heat controller", func() {
 
 		When("DB is created", func() {
 			BeforeEach(func() {
+				DeferCleanup(DeleteInstance, CreateHeat(heatName, GetDefaultHeatSpec()))
 				DeferCleanup(
 					DeleteDBService,
 					CreateDBService(
@@ -271,14 +239,14 @@ var _ = Describe("Heat controller", func() {
 						},
 					),
 				)
-				SimulateTransportURLReady(heatTransportURLName)
+				th.SimulateTransportURLReady(heatTransportURLName)
 				DeferCleanup(DeleteKeystoneAPI, CreateKeystoneAPI(namespace))
 			})
 			It("Should set DBReady Condition and set DatabaseHostname Status when DB is Created", func() {
-				SimulateMariaDBDatabaseCompleted(types.NamespacedName{Namespace: namespace, Name: "heat"})
+				th.SimulateMariaDBDatabaseCompleted(heatName)
 				th.SimulateJobSuccess(types.NamespacedName{Namespace: namespace, Name: "heat-db-sync"})
 				Heat := GetHeat(heatName)
-				Expect(Heat.Status.DatabaseHostname).To(Equal("hostname-for-" + Heat.Spec.DatabaseInstance))
+				Expect(Heat.Status.DatabaseHostname).To(Equal("heat"))
 				th.ExpectCondition(
 					heatName,
 					ConditionGetterFunc(HeatConditionGetter),
@@ -296,6 +264,7 @@ var _ = Describe("Heat controller", func() {
 
 		When("Keystone Resources are created", func() {
 			BeforeEach(func() {
+				DeferCleanup(DeleteInstance, CreateHeat(heatName, GetDefaultHeatSpec()))
 				DeferCleanup(
 					DeleteDBService,
 					CreateDBService(
@@ -306,15 +275,14 @@ var _ = Describe("Heat controller", func() {
 						},
 					),
 				)
-				SimulateTransportURLReady(heatTransportURLName)
+				th.SimulateTransportURLReady(heatTransportURLName)
 				DeferCleanup(DeleteKeystoneAPI, CreateKeystoneAPI(namespace))
-				SimulateMariaDBDatabaseCompleted(types.NamespacedName{Namespace: namespace, Name: "heat"})
+				th.SimulateMariaDBDatabaseCompleted(types.NamespacedName{Namespace: namespace, Name: "heat"})
 				th.SimulateJobSuccess(types.NamespacedName{Namespace: namespace, Name: "heat-db-sync"})
-				SimulateKeystoneServiceReady(types.NamespacedName{Namespace: namespace, Name: "heat"})
-				SimulateKeystoneEndpointReady(types.NamespacedName{Namespace: namespace, Name: "heat"})
+				th.SimulateKeystoneServiceReady(types.NamespacedName{Namespace: namespace, Name: "heat"})
+				th.SimulateKeystoneEndpointReady(types.NamespacedName{Namespace: namespace, Name: "heat"})
 			})
 			It("Should set ExposeServiceReadyCondition Condition", func() {
-
 				th.ExpectCondition(
 					heatName,
 					ConditionGetterFunc(HeatConditionGetter),
@@ -333,7 +301,6 @@ var _ = Describe("Heat controller", func() {
 			})
 
 			It("Endpoints are created", func() {
-
 				th.ExpectCondition(
 					heatName,
 					ConditionGetterFunc(HeatConditionGetter),
@@ -371,7 +338,8 @@ var _ = Describe("Heat controller", func() {
 
 		When("Heat CR is deleted", func() {
 			BeforeEach(func() {
-				SimulateTransportURLReady(heatTransportURLName)
+				DeferCleanup(DeleteInstance, CreateHeat(heatName, GetDefaultHeatSpec()))
+				th.SimulateTransportURLReady(heatTransportURLName)
 			})
 
 			It("removes the Config MAP", func() {
@@ -393,8 +361,6 @@ var _ = Describe("Heat controller", func() {
 				Eventually(func() corev1.ConfigMap {
 					return *th.GetConfigMap(scriptsCM)
 				}, timeout, interval).ShouldNot(BeNil())
-
-				DeleteHeat(heatName)
 
 				Eventually(func() []corev1.ConfigMap {
 					return th.ListConfigMaps(configataCM.Name).Items

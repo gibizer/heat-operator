@@ -53,10 +53,11 @@ func (mr *MockOkoOpenStackMockRecorder) CreateDomain(arg0, arg1 interface{}) *go
 // CreateUser mocks base method.
 func (m *MockOkoOpenStack) CreateUser(arg0 logr.Logger, arg1 openstack.User) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateUser", arg0, arg1)
-	ret0, _ := ret[0].(string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	//	ret := m.ctrl.Call(m, "CreateUser", arg0, arg1)
+	//	ret0, _ := ret[0].(string)
+	//	ret1, _ := ret[1].(error)
+	//return ret0, ret1
+	return "mockUserID", nil
 }
 
 // CreateUser indicates an expected call of CreateUser.

@@ -66,16 +66,6 @@ type OkoOpenStack interface {
 	CreateDomain(log logr.Logger, domain openstack.Domain) (string, error)
 }
 
-type OpenStackImpl struct{}
-
-func (o OpenStackImpl) CreateUser(log logr.Logger, user openstack.User) (string, error) {
-	return o.CreateUser(log, user)
-}
-
-func (o OpenStackImpl) CreateDomain(log logr.Logger, domain openstack.Domain) (string, error) {
-	return o.CreateDomain(log, domain)
-}
-
 // +kubebuilder:rbac:groups=heat.openstack.org,resources=heats,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=heat.openstack.org,resources=heats/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=heat.openstack.org,resources=heats/finalizers,verbs=update
