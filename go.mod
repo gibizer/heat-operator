@@ -14,10 +14,11 @@ require (
 	github.com/openstack-k8s-operators/heat-operator/api v0.0.0-20230504214736-0b9ab858e537
 	github.com/openstack-k8s-operators/infra-operator/apis v0.0.0-20230427061808-1c6403dc94b9
 	github.com/openstack-k8s-operators/keystone-operator/api v0.0.0-20230503142030-4d9a9bccf284
-	github.com/openstack-k8s-operators/lib-common/modules/common v0.0.0-20230504132716-fcffbcec69db
-	github.com/openstack-k8s-operators/lib-common/modules/database v0.0.0-20230504132716-fcffbcec69db
-	github.com/openstack-k8s-operators/lib-common/modules/openstack v0.0.0-20230504132716-fcffbcec69db
-	github.com/openstack-k8s-operators/lib-common/modules/test v0.0.0-20230425053514-21f91c966010
+	github.com/openstack-k8s-operators/lib-common/modules/common v0.0.0-20230505090059-1db7d191885e
+	github.com/openstack-k8s-operators/lib-common/modules/database v0.0.0-20230505090059-1db7d191885e
+	github.com/openstack-k8s-operators/lib-common/modules/openstack v0.0.0-20230505090059-1db7d191885e
+	github.com/openstack-k8s-operators/lib-common/modules/test v0.0.0-20230505090059-1db7d191885e
+	github.com/openstack-k8s-operators/lib-common/modules/test-operators v0.0.0-20230505090059-1db7d191885e
 	github.com/openstack-k8s-operators/mariadb-operator/api v0.0.0-20230428102546-5d2d648e367e
 	k8s.io/api v0.26.3
 	k8s.io/apimachinery v0.26.3
@@ -48,6 +49,7 @@ require (
 	github.com/imdario/mergo v0.3.15 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.4.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
@@ -62,6 +64,7 @@ require (
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect
+	golang.org/x/exp v0.0.0-20230510235704-dd950f8aeaea // indirect
 	golang.org/x/mod v0.9.0 // indirect
 	golang.org/x/net v0.9.0 // indirect
 	golang.org/x/oauth2 v0.7.0 // indirect
@@ -85,3 +88,5 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
+
+replace github.com/openstack-k8s-operators/lib-common/modules/test-operators => github.com/gibizer/lib-common/modules/test-operators v0.0.0-20230515090953-ff4f551d7109

@@ -22,6 +22,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	. "github.com/openstack-k8s-operators/lib-common/modules/test-operators/apis"
 	. "github.com/openstack-k8s-operators/lib-common/modules/test/helpers"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,13 +37,8 @@ var _ = Describe("Heat controller", func() {
 	var secret *corev1.Secret
 	var heatTransportURLName types.NamespacedName
 	var heatName types.NamespacedName
-	//var ctrl *gomock.Controller
-	//var mockOpenStack *MockOkoOpenStack
 
 	BeforeEach(func() {
-//		ctrl = gomock.NewController(GinkgoT())
-//		mockOpenStack = NewMockOkoOpenStack(ctrl)
-//		defer ctrl.Finish()
 
 		heatName = types.NamespacedName{
 			Name:      "heat",
@@ -276,7 +273,12 @@ var _ = Describe("Heat controller", func() {
 					),
 				)
 				th.SimulateTransportURLReady(heatTransportURLName)
-				DeferCleanup(DeleteKeystoneAPI, CreateKeystoneAPI(namespace))
+
+				keystoneFixture := NewKeystoneAPIFixtureWithServer(logger)
+				keystoneFixture.Setup()
+				DeferCleanup(keystoneFixture.Cleanup)
+				DeferCleanup(th.DeleteKeystoneAPI, th.CreateKeystoneAPIWithFixture(namespace, keystoneFixture))
+
 				th.SimulateMariaDBDatabaseCompleted(types.NamespacedName{Namespace: namespace, Name: "heat"})
 				th.SimulateJobSuccess(types.NamespacedName{Namespace: namespace, Name: "heat-db-sync"})
 				th.SimulateKeystoneServiceReady(types.NamespacedName{Namespace: namespace, Name: "heat"})

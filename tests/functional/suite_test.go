@@ -31,7 +31,7 @@ import (
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 
 	"github.com/openstack-k8s-operators/heat-operator/controllers"
-	. "github.com/openstack-k8s-operators/lib-common/modules/test/helpers"
+	. "github.com/openstack-k8s-operators/lib-common/modules/test-operators/helpers"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -113,6 +113,7 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 
 	//+kubebuilder:scaffold:scheme
+	logger = ctrl.Log.WithName("---Test---")
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
